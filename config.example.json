@@ -25,5 +25,9 @@
   "enable_fans_medal": false,
   "fans_medal_like_number": 5,
   "fans_medal_heartbeat_number": 30,
+  "ql_base_url": "",
+  "ql_client_id": "",
+  "ql_client_secret": "",
+  "notify_fail_only": true,
   "persist_cookies": true
 }

@@ -82,16 +82,45 @@ python main.py login --save
 | `enable_lottery` / `enable_fans_medal` | `false` | 开启可选任务 |
 | `persist_cookies` | `true` | 将补齐的 buvid3/bili_ticket 写回配置文件 |
 | `user_agent` / `web_proxy` | 空 | 自定义 UA / 代理 |
+| `ql_base_url` / `ql_client_id` / `ql_client_secret` | 空 | 青龙 OpenAPI 通知凭据 |
+| `notify_fail_only` | `true` | 青龙通知：仅失败时推送 |
+
+## 青龙面板部署
+
+支持直接在[青龙面板](https://github.com/whyour/qinglong)（2.x）中运行，无需 config.json：
+
+```bash
+cd /ql/scripts
+git clone https://github.com/Liuxinlin-hesy/BiliAutoSign.git
+# 依赖：面板 → 依赖管理 → Python 依赖安装 requests、qrcode、colorama
+```
+
+1. **环境变量**（面板 → 环境变量）：
+   - 账号：`Ray_BiliBiliCookies__0`、`Ray_BiliBiliCookies__1`...（BiliBiliToolPro 兼容命名），
+     或 `BILI_COOKIE`（多账号换行分隔）
+   - 通知（可选）：`QL_CLIENT_ID` / `QL_CLIENT_SECRET`（面板 → 系统设置 → OpenAPI）
+   - 任务参数：所有配置项均可用 `BILI_*` 环境变量覆盖，如 `BILI_NUMBER_OF_COINS=5`、
+     `BILI_RANDOM_SLEEP=10`、`BILI_TASKS=daily,live,manga,vip`
+2. **定时任务**：新建任务，命令
+   `task BiliAutoSign/qinglong/entry.py run`（或 `python3 /ql/scripts/BiliAutoSign/main.py run`），
+   定时规则如 `10 9 * * *`（每天 9:10，建议避开整点）
+3. 青龙下 cookie 来自环境变量，工具不会写回文件；运行结束（有失败项时）推送青龙通知。
+
+详见 [qinglong/README.md](qinglong/README.md)。
 
 ## 目录结构
 
 ```
 main.py                 CLI 入口
 config.json             配置文件（自动生成）
+qinglong/
+  entry.py              青龙面板入口脚本
+  README.md             青龙部署指南
 bili/
   risk.py               WBI 签名、buvid3/4、bili_ticket、指纹参数
   client.py             风控 HTTP 客户端（间隔/重试/熔断/签名）
   account.py            cookie 解析与校验
+  notify.py             青龙 OpenAPI 通知
   tasks/
     daily.py            每日任务（登录/观看/分享/投币/福利）
     live.py             银瓜子兑换硬币

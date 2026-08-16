@@ -21,20 +21,38 @@ from bili import logger  # noqa: E402
 from bili.__init__ import __version__  # noqa: E402
 from bili.account import Account  # noqa: E402
 from bili.client import BiliClient, BiliRequestError  # noqa: E402
-from bili.config import load_config, save_config, update_cookie_in_config  # noqa: E402
+from bili.config import (  # noqa: E402
+    env_config_overrides,
+    load_config,
+    load_env_cookies,
+    ql_env_config,
+    save_config,
+    update_cookie_in_config,
+)
 from bili.tasks import build_tasks, TASK_REGISTRY  # noqa: E402
 
 ALL_TASKS = ["daily", "live", "manga", "vip", "lottery", "fansmedal"]
 
 
 def get_accounts(cfg, cli_cookie=None, cli_accounts=None):
+    """账号来源优先级：--cookie 参数 > 青龙环境变量 > config.json cookies。
+
+    青龙环境变量：
+    - BILI_COOKIE：多账号用换行分隔
+    - Ray_BiliBiliCookies__0 / __1 / ...：BiliBiliToolPro 兼容
+    返回 (accounts, from_env)。from_env=True 时表示账号来自环境变量（青龙）。
+    """
     cookies = []
+    from_env = False
     if cli_cookie:
         cookies.append(cli_cookie)
-    cookies += [c for c in (cfg.get("cookies") or []) if c]
-    env_ck = os.environ.get("BILI_COOKIE")
-    if env_ck and not cli_cookie:
-        cookies.insert(0, env_ck)
+    else:
+        env_cookies, env_found = load_env_cookies()
+        if env_found:
+            cookies = env_cookies
+            from_env = True
+        else:
+            cookies += [c for c in (cfg.get("cookies") or []) if c]
 
     accounts = []
     for i, ck in enumerate(cookies):
@@ -52,7 +70,7 @@ def get_accounts(cfg, cli_cookie=None, cli_accounts=None):
             if part.isdigit():
                 idxs.append(int(part) - 1)
         accounts = [a for i, a in enumerate(accounts) if i in idxs]
-    return accounts
+    return accounts, from_env
 
 
 def select_tasks(cfg, cli_tasks):
@@ -75,7 +93,7 @@ def random_sleep(cfg):
         time.sleep(m * 60)
 
 
-def run_tasks(cfg, names, accounts, config_path):
+def run_tasks(cfg, names, accounts, config_path, persist=True):
     tasks = build_tasks(names, cfg)
     random_sleep(cfg)
 
@@ -86,7 +104,8 @@ def run_tasks(cfg, names, accounts, config_path):
         changed = False
         try:
             client.ensure_device()
-            changed = update_cookie_in_config(cfg, acct, config_path)
+            if persist:
+                changed = update_cookie_in_config(cfg, acct, config_path)
         except Exception as e:  # noqa: BLE001
             logger.debug(f"设备初始化失败：{e}")
         if changed:
@@ -107,21 +126,45 @@ def run_tasks(cfg, names, accounts, config_path):
         rows.append((acct.uid, ok_count, fail_count, notes))
 
     logger.summary_table(rows)
+    return rows
+
+
+def merge_env_overrides(cfg):
+    """合并青龙/BILI_* 环境变量（环境变量优先于 config.json）。"""
+    return env_config_overrides(cfg)
+
+
+def send_notify_if_needed(cfg, rows, names):
+    """运行结束后按配置发送青龙通知。notify_fail_only=True 时仅失败才通知。"""
+    if not (cfg.get("ql_client_id") and cfg.get("ql_client_secret")):
+        return
+    total_fail = sum(r[2] for r in rows)
+    fail_only = str(cfg.get("notify_fail_only", "true")).lower() in ("1", "true", "yes")
+    if fail_only and total_fail == 0:
+        logger.info("任务全部成功，按配置（notify_fail_only）跳过通知")
+        return
+    title = "BiliAutoSign 运行完成" if total_fail == 0 else f"BiliAutoSign 运行异常（{total_fail} 项失败）"
+    from bili.notify import build_summary, send_qinglong_notify
+
+    send_qinglong_notify(cfg, title, build_summary(rows, names))
 
 
 def cmd_run(args, cfg, config_path):
     names = select_tasks(cfg, args.tasks)
     logger.info(f"目标任务：{', '.join(names)}（共 {len(names)} 个）")
-    accounts = get_accounts(cfg, args.cookie, args.accounts)
+    accounts, from_env = get_accounts(cfg, args.cookie, args.accounts)
     if not accounts:
-        logger.error("没有可用的账号：请检查 config.json 的 cookies 或使用 --cookie 参数")
+        logger.error("没有可用的账号：请检查 config.json 的 cookies 或配置环境变量（BILI_COOKIE / Ray_BiliBiliCookies__N）")
         sys.exit(1)
-    logger.info(f"共 {len(accounts)} 个账号参与本次运行")
-    run_tasks(cfg, names, accounts, config_path)
+    logger.info(f"共 {len(accounts)} 个账号参与本次运行"
+                + ("（来自青龙环境变量）" if from_env else ""))
+    cfg = merge_env_overrides(cfg)
+    rows = run_tasks(cfg, names, accounts, config_path, persist=not from_env)
+    send_notify_if_needed(cfg, rows, names)
 
 
 def cmd_check(args, cfg, _config_path=None):
-    accounts = get_accounts(cfg, args.cookie, args.accounts)
+    accounts, from_env = get_accounts(cfg, args.cookie, args.accounts)
     if not accounts:
         logger.error("没有可用的账号")
         sys.exit(1)
