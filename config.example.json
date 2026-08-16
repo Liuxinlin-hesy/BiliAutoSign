@@ -1,0 +1,29 @@
+{
+  "cookies": [
+    "SESSDATA=xxxx; bili_jct=xxxx; DedeUserID=xxxx; DedeUserID__ckMd5=xxxx"
+  ],
+  "tasks": ["daily", "live", "manga", "vip"],
+  "is_watch_video": true,
+  "is_share_video": true,
+  "number_of_coins": 5,
+  "number_of_protected_coins": 0,
+  "select_like": false,
+  "save_coins_when_lv6": false,
+  "support_up_ids": [],
+  "is_silver2coin": true,
+  "device_platform": "android",
+  "custom_comic_id": 0,
+  "custom_ep_id": 0,
+  "interval_seconds_between_request_api": 3,
+  "random_sleep_max_min": 0,
+  "enable_bili_ticket": true,
+  "timeout": 20,
+  "retries": 2,
+  "user_agent": "",
+  "web_proxy": "",
+  "enable_lottery": false,
+  "enable_fans_medal": false,
+  "fans_medal_like_number": 5,
+  "fans_medal_heartbeat_number": 30,
+  "persist_cookies": true
+}

@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# 敏感配置：config.json 包含真实 cookie，绝不提交
+config.json
+
+# 日志/临时文件
+*.log
+*.tmp
