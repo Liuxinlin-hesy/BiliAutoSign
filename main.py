@@ -150,9 +150,13 @@ def send_notify_if_needed(cfg, rows, names):
 
 
 def cmd_run(args, cfg, config_path):
-    names = select_tasks(cfg, args.tasks)
+    names = select_tasks(cfg, getattr(args, "tasks", None))
     logger.info(f"目标任务：{', '.join(names)}（共 {len(names)} 个）")
-    accounts, from_env = get_accounts(cfg, args.cookie, args.accounts)
+    accounts, from_env = get_accounts(
+        cfg,
+        getattr(args, "cookie", None),
+        getattr(args, "accounts", None),
+    )
     if not accounts:
         logger.error("没有可用的账号：请检查 config.json 的 cookies 或配置环境变量（BILI_COOKIE / Ray_BiliBiliCookies__N）")
         sys.exit(1)
@@ -164,7 +168,11 @@ def cmd_run(args, cfg, config_path):
 
 
 def cmd_check(args, cfg, _config_path=None):
-    accounts, from_env = get_accounts(cfg, args.cookie, args.accounts)
+    accounts, from_env = get_accounts(
+        cfg,
+        getattr(args, "cookie", None),
+        getattr(args, "accounts", None),
+    )
     if not accounts:
         logger.error("没有可用的账号")
         sys.exit(1)
@@ -259,6 +267,10 @@ def main():
         description=f"B 站每日签到工具 v{__version__}（参考 BiliBiliToolPro / PiliPlusX）",
     )
     parser.add_argument("--config", default=None, help="配置文件路径（默认 ./config.json）")
+    # 顶层也提供 run 的参数（无子命令时直接运行默认任务）
+    parser.add_argument("-t", "--tasks", default=None, help=f"任务列表，逗号分隔：{','.join(ALL_TASKS)}")
+    parser.add_argument("-a", "--accounts", default=None, help="账号序号，逗号分隔（从 1 开始）")
+    parser.add_argument("-c", "--cookie", default=None, help="临时指定单个 cookie")
     sub = parser.add_subparsers(dest="command")
 
     p_run = sub.add_parser("run", help="运行签到任务（默认命令）")
