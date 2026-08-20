@@ -194,71 +194,74 @@ def cmd_check(args, cfg, _config_path=None):
 
 
 def cmd_login(args, cfg, config_path):
-    import requests
+    # TV/APP 端点扫码登录（参考 PiliPlusX：独立登录身份 + AppSign 签名）
+    from bili.login import TvLogin
 
-    from bili.client import DEFAULT_UA
+    import qrcode as qrcode_lib
+    import requests as _requests
 
-    s = requests.Session()
-    s.headers.update({"User-Agent": args.ua or DEFAULT_UA,
-                      "Accept": "application/json, text/plain, */*"})
-    j = s.get("https://passport.bilibili.com/x/passport-login/web/qrcode/generate",
-              timeout=20).json()
-    if j.get("code") != 0:
-        logger.error(f"获取二维码失败：{j.get('message')}")
-        sys.exit(1)
-    url = j["data"]["url"]
-    key = j["data"]["qrcode_key"]
-    logger.info("请使用 B 站手机客户端扫描下方二维码（终端不支持时访问：")
-    logger.info("https://tool.lu/qrcode/basic.html?text=" + requests.utils.quote(url))
+    login = TvLogin()
     try:
-        import qrcode
-
-        qr = qrcode.QRCode(border=1)
-        qr.add_data(url)
-        qr.make(fit=True)
-        qr.print_ascii(invert=True)
+        qr = login.generate()
+    except Exception as e:  # noqa: BLE001
+        logger.error(f"获取二维码失败：{e}")
+        sys.exit(1)
+    url = qr["url"]
+    auth_code = qr["auth_code"]
+    logger.info("请使用 B 站手机客户端扫描下方二维码（终端不支持时访问：")
+    logger.info("https://tool.lu/qrcode/basic.html?text=" + _requests.utils.quote(url))
+    try:
+        qr_img = qrcode_lib.QRCode(border=1)
+        qr_img.add_data(url)
+        qr_img.make(fit=True)
+        qr_img.print_ascii(invert=True)
     except Exception:  # noqa: BLE001
         logger.warn("（无法在终端绘制二维码）")
-    logger.info("等待扫码...（120 秒超时）")
+    logger.info("等待扫码...（180 秒超时）")
 
-    deadline = time.time() + 120
-    cookie_parts = {}
+    deadline = time.time() + 180
     while time.time() < deadline:
         time.sleep(2)
-        r = s.get(
-            "https://passport.bilibili.com/x/passport-login/web/qrcode/poll",
-            params={"qrcode_key": key, "source": "main_mini"},
-            timeout=20,
-        )
-        j = r.json()
-        code = (j.get("data") or {}).get("code", j.get("code"))
-        if code == 0:
-            for v in r.headers.get_list("Set-Cookie") or []:
-                for part in v.split(";"):
-                    part = part.strip()
-                    if "=" in part and not part.lower().startswith(("path=", "expires=",
-                                                                      "domain=", "max-age=",
-                                                                      "httponly", "secure",
-                                                                      "samesite")):
-                        k, val = part.split("=", 1)
-                        cookie_parts[k.strip()] = val.strip()
-            cookie_str = "; ".join(f"{k}={v}" for k, v in cookie_parts.items())
-            logger.ok("扫码成功！")
-            logger.info(f"Cookie：\n{cookie_str}")
-            if args.save:
-                cookies = cfg.get("cookies") or []
-                cookies.append(cookie_str)
-                cfg["cookies"] = cookies
-                save_config(cfg, config_path)
-                logger.ok(f"已保存到 {config_path}")
-            return
+        try:
+            res = login.poll(auth_code)
+        except Exception as e:  # noqa: BLE001
+            logger.warn(f"轮询异常：{e}")
+            continue
+        if res["status"]:
+            break
+        code = res["code"]
         if code == 86038:
             logger.error("二维码已失效，请重新运行 login")
             sys.exit(1)
-        msg = {86101: "等待扫码...", 86090: "已扫码，请在手机上确认"}.get(code, f"状态 {code}")
+        msg = {86039: "等待扫码...", 86090: "已扫码，请在手机上确认"}.get(code, f"状态 {code}")
         logger.info(msg)
-    logger.error("扫码登录超时")
-    sys.exit(1)
+    else:
+        logger.error("扫码登录超时")
+        sys.exit(1)
+
+    cookie_str = login.extract_cookie()
+    # 用拿到的 cookie 校验登录态并补齐设备身份（buvid3/buvid4/bili_ticket）
+    acct = Account(cookie_str, name="新登录")
+    client = BiliClient(acct, cfg)
+    try:
+        client.ensure_device()
+        info = client.user_info()
+        cookie_str = acct.to_cookie_str()
+    except Exception as e:  # noqa: BLE001
+        logger.warn(f"登录态校验/补设备身份失败（{e}），仍输出原始 cookie")
+    logger.ok("扫码成功！")
+    try:
+        info = client.user_info()
+        logger.info(f"账号：{info.get('uname')}（uid {acct.uid}）")
+    except Exception:  # noqa: BLE001
+        pass
+    logger.info(f"Cookie：\n{cookie_str}")
+    if args.save:
+        cookies = cfg.get("cookies") or []
+        cookies.append(cookie_str)
+        cfg["cookies"] = cookies
+        save_config(cfg, config_path)
+        logger.ok(f"已保存到 {config_path}")
 
 
 def main():

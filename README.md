@@ -15,7 +15,7 @@
 | `vip` 大会员任务 | 大会员大积分：经验加速包、三日签到、福利/体验任务、日常任务（浏览装扮商城/会员购/追番/影视、观看剧集） | `/x/vip/privilege/my`、`three_days_sign`、`/pgc/activity/score/task/*` |
 | `lottery` 天选时刻（可选） | 扫描直播分区，自动参与免费天选抽奖 | `/xlive/lottery-interface/v1/Anchor/*` |
 | `fansmedal` 粉丝勋章（可选） | 有粉丝牌的直播间点赞 + 直播心跳 | `MedalWall`、`likeReportV3`、`x25Kn/E/X` |
-| `login` 扫码登录 | 终端二维码登录，可保存新 cookie | `/x/passport-login/web/qrcode/*` |
+| `login` 扫码登录 | 终端二维码登录（TV/AAP 端点扫码，参考 PiliPlusX：独立登录身份 + APP 签名），可保存新 cookie | `/x/passport-tv-login/qrcode/auth_code`、`poll` |
 
 任务默认按 `config.json` 中 `tasks` 配置运行（默认 `daily,live,manga,vip`）；
 `lottery`/`fansmedal` 默认关闭，通过配置 `enable_lottery` / `enable_fans_medal` 开启。
@@ -118,6 +118,7 @@ qinglong/
   README.md             青龙部署指南
 bili/
   risk.py               WBI 签名、buvid3/4、bili_ticket、指纹参数
+  login.py              TV/APP 端点扫码登录（独立身份 + APP 签名）
   client.py             风控 HTTP 客户端（间隔/重试/熔断/签名）
   account.py            cookie 解析与校验
   notify.py             青龙 OpenAPI 通知
